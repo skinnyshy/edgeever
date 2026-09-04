@@ -60,6 +60,11 @@ import { EditorOutline } from "./EditorOutline";
 import { EditorTagPicker } from "./EditorTagPicker";
 import { useAiBubbleMenu } from "./editor/useAiBubbleMenu";
 import {
+  createEditorInstanceMemoIdentity,
+  reconcileEditorInstanceMemoIdentity,
+  remapEditorInstanceMemoIdentity,
+} from "./editor/editor-instance-identity";
+import {
   createMarkdownModeSnapshot,
   isMarkdownSourceUnchanged,
   resolveMarkdownModeContent,
@@ -108,7 +113,7 @@ import { ShareNoteImageDialog, type ShareNoteImageSource } from "./dialogs/Share
 import { AiAssistantDialog, type AiAssistantAnchor } from "./dialogs/AiAssistantDialog";
 import { api } from "@/lib/api";
 import { isDesktopResourceRuntime, stageDesktopResource, toDesktopResourceUrl } from "@/lib/desktop-resources";
-import { cn, formatDateTime, parseTagsText } from "@/lib/utils";
+import { cn, formatDateTime, formatLocalizedDateTime, parseTagsText } from "@/lib/utils";
 import { EDITOR_CONTENT_MAX_WIDTH, EDITOR_CONTENT_MAX_WIDTH_COLLAPSED } from "@/lib/workspace-ui";
 import {
   countMemoCharacters,
@@ -153,7 +158,9 @@ import {
   getEditableMemoTitle,
   getNotebookMoveOptions,
   readDesktopReadingProtectionPreference,
+  readEditorOutlineCollapsedPreference,
   writeDesktopReadingProtectionPreference,
+  writeEditorOutlineCollapsedPreference,
   type EditorContentAlignment,
   type MemoDocumentActionRequest,
   type ShortcutSettings,
@@ -635,7 +642,7 @@ const RichEditorPane = ({
   const [markdownSource, setMarkdownSource] = useState("");
   const [isMarkdownMode, setIsMarkdownMode] = useState(false);
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
-  const [editorOutlineCollapsed, setEditorOutlineCollapsed] = useState(false);
+  const [editorOutlineCollapsed, setEditorOutlineCollapsed] = useState(readEditorOutlineCollapsedPreference);
   const [wechatCopyState, setWechatCopyState] = useState<"idle" | "copying" | "copied" | "error">("idle");
   const [memoIdCopyNotice, setMemoIdCopyNotice] = useState<{ status: "copied" | "error"; id: string } | null>(null);
   const handledSaveAndSyncTokenRef = useRef(saveAndSyncToken);
@@ -706,6 +713,19 @@ const RichEditorPane = ({
       const nextProtectedMode = !protectedMode;
       writeDesktopReadingProtectionPreference(nextProtectedMode);
       return nextProtectedMode;
+    });
+  }, []);
+
+  const handleEditorOutlineCollapsedChange = useCallback((collapsed: boolean) => {
+    setEditorOutlineCollapsed(collapsed);
+    writeEditorOutlineCollapsedPreference(collapsed);
+  }, []);
+
+  const toggleEditorOutline = useCallback(() => {
+    setEditorOutlineCollapsed((collapsed) => {
+      const nextCollapsed = !collapsed;
+      writeEditorOutlineCollapsedPreference(nextCollapsed);
+      return nextCollapsed;
     });
   }, []);
 
@@ -838,6 +858,14 @@ const RichEditorPane = ({
   }
   const hydratingRef = useRef(false);
   const hydratedMemoIdRef = useRef<string | null>(null);
+  const editorInstanceMemoIdentityRef = useRef(
+    createEditorInstanceMemoIdentity(memo?.id ?? null),
+  );
+  editorInstanceMemoIdentityRef.current = reconcileEditorInstanceMemoIdentity(
+    editorInstanceMemoIdentityRef.current,
+    memo?.id ?? null,
+  );
+  const editorInstanceMemoKey = editorInstanceMemoIdentityRef.current.instanceKey;
   /** Last content source applied to the editor — used to skip redundant setContent. */
   const appliedEditorSourceKeyRef = useRef<string | null>(null);
   const editingMemoIdRef = useRef<string | null>(memo?.id ?? null);
@@ -870,6 +898,10 @@ const RichEditorPane = ({
       if (!nextMemoId || nextMemoId === currentMemo.id) return;
 
       const previousMemoId = currentMemo.id;
+      editorInstanceMemoIdentityRef.current = remapEditorInstanceMemoIdentity(
+        editorInstanceMemoIdentityRef.current,
+        mappings,
+      );
       memoRef.current = { ...currentMemo, id: nextMemoId };
       if (editingMemoIdRef.current === previousMemoId) editingMemoIdRef.current = nextMemoId;
       if (hydratedMemoIdRef.current === previousMemoId) {
@@ -1336,10 +1368,10 @@ const RichEditorPane = ({
       },
     },
   }, [
-    // A ProseMirror undo history belongs to exactly one memo. Reusing the same
-    // Editor instance across memo switches lets Ctrl/Cmd+Z undo the hydration
-    // transaction and restore another memo's entire document.
-    memo?.id,
+    // A ProseMirror undo history belongs to exactly one logical memo. A newly
+    // created memo keeps the same instance while its local id is remapped to a
+    // durable id; an actual memo switch still receives a fresh undo history.
+    editorInstanceMemoKey,
   ]);
 
   useEffect(() => {
@@ -3104,8 +3136,8 @@ const RichEditorPane = ({
       return;
     }
 
-    setEditorOutlineCollapsed((current) => !current);
-  }, [editorShortcutBlocked, isMobileViewport, outlineToggleToken, useMarkdownSourceEditor, useMobilePlainTextEditor]);
+    toggleEditorOutline();
+  }, [editorShortcutBlocked, isMobileViewport, outlineToggleToken, toggleEditorOutline, useMarkdownSourceEditor, useMobilePlainTextEditor]);
 
   useEffect(() => {
     if (handledSaveAndSyncTokenRef.current === saveAndSyncToken || saveMutationPending) {
@@ -3593,7 +3625,9 @@ const RichEditorPane = ({
         ? "bg-emerald-50 text-emerald-700"
         : saveStateClassName;
 
-  const updatedLabel = formatDateTime(memo.updatedAt);
+  const memoDateLocale = i18n.resolvedLanguage ?? i18n.language;
+  const createdLabel = formatLocalizedDateTime(memo.createdAt, memoDateLocale);
+  const updatedLabel = formatLocalizedDateTime(memo.updatedAt, memoDateLocale);
   const currentNotebookLabel = notebookOptions.find((notebook) => notebook.id === memo.notebookId)?.name ?? t("editor.notebookFallback");
   const currentMarkdownForAi = getCurrentMarkdownForAi();
 
@@ -3834,9 +3868,6 @@ const RichEditorPane = ({
                 </Button>
               </IconTooltip>
             </div>
-            <span className="hidden truncate text-xs text-slate-400 sm:inline">
-              {t("editor.updatedAt", { time: updatedLabel })}
-            </span>
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
@@ -4220,6 +4251,9 @@ const RichEditorPane = ({
                 markDirty();
               }}
             />
+            <span className="w-full px-1.5 text-xs leading-5 text-slate-400">
+              {t("editor.timestamps", { createdTime: createdLabel, updatedTime: updatedLabel })}
+            </span>
             {!readOnly && (
               <IconTooltip label={`${t(desktopReadingProtection ? "editor.disableReadingProtection" : "editor.enableReadingProtection")} (${formatShortcutBinding(shortcutSettings.toggleReadingProtection)})`}>
                 <Button
@@ -4473,7 +4507,7 @@ const RichEditorPane = ({
               scrollContainer={editorScrollContainer}
               collapsed={editorOutlineCollapsed}
               shortcutLabel={formatShortcutBinding(shortcutSettings.toggleOutline)}
-              onCollapsedChange={setEditorOutlineCollapsed}
+              onCollapsedChange={handleEditorOutlineCollapsedChange}
             />
           )}
         </div>

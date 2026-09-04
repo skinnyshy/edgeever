@@ -18,10 +18,15 @@ import * as m from "motion/react-m";
 import { SystemInfoDialog } from "@/components/SystemInfoDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SETTINGS_CARD_DESCRIPTION_CLASSNAME,
+  SETTINGS_CARD_HEADER_CLASSNAME,
+  SETTINGS_CARD_ICON_CLASSNAME,
+  SETTINGS_CARD_TITLE_CLASSNAME,
+} from "./settings/settings-ui";
 import type { EditorContentAlignment, ShortcutSettings } from "@/lib/app-helpers";
 import { WORKSPACE_PAGE_TITLE_CLASSNAME } from "@/lib/workspace-ui";
 import { cn } from "@/lib/utils";
-import { AdvancedPlayCard } from "./settings/AdvancedPlayCard";
 import { AccountInfoCard } from "./settings/AccountInfoCard";
 import { DataExportCard } from "./settings/DataExportCard";
 import { DesktopLocalDataCard } from "./settings/DesktopLocalDataCard";
@@ -34,7 +39,6 @@ import { PasswordCard } from "./settings/PasswordCard";
 import { UserManagementCard } from "./settings/UserManagementCard";
 import { ObjectStorageCard } from "./settings/ObjectStorageCard";
 import { AiModelCard } from "./settings/AiModelCard";
-import { AiPromptsCard } from "./settings/AiPromptsCard";
 import { AiTagSuggestionPromptCard } from "./settings/AiTagSuggestionPromptCard";
 import { ThemeToggle } from "./ThemeToggle";
 import type { AuthUser } from "@edgeever/shared";
@@ -241,9 +245,14 @@ export const SettingsPane = ({
                 onOpenAiSettings={() => setActiveTab("ai")} />
             ) : (
               <Card className="shadow-none">
-                <CardHeader className="p-4 sm:p-5">
-                  <CardTitle className="text-sm">{t("companion.discovery.settingsTitle")}</CardTitle>
-                  <CardDescription>{t("companion.unavailableHelp")}</CardDescription>
+                <CardHeader className={SETTINGS_CARD_HEADER_CLASSNAME}>
+                  <CardTitle className={SETTINGS_CARD_TITLE_CLASSNAME}>
+                    <PawPrint className={SETTINGS_CARD_ICON_CLASSNAME} />
+                    {t("companion.discovery.settingsTitle")}
+                  </CardTitle>
+                  <CardDescription className={SETTINGS_CARD_DESCRIPTION_CLASSNAME}>
+                    {t("companion.unavailableHelp")}
+                  </CardDescription>
                 </CardHeader>
               </Card>
             )}
@@ -267,8 +276,6 @@ export const SettingsPane = ({
           <SettingsGroup>
             <AiModelCard />
             <McpConfigCard />
-            <AiPromptsCard onOpenLibrary={onOpenAiPrompts} />
-            <AdvancedPlayCard />
           </SettingsGroup>
         );
       case "advanced":

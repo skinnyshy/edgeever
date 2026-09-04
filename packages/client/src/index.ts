@@ -48,6 +48,9 @@ import type {
   SyncBootstrapResponse,
   SyncChange,
   SyncChangesResponse,
+  DeploymentMetadata,
+  PluginPublicFetchRequest,
+  PluginPublicFetchResponse,
 } from "@edgeever/shared";
 
 const MAX_SINGLE_REQUEST_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -101,6 +104,7 @@ export type InstanceHealth = {
   containerImageSource?: "official-ghcr" | "official-cn-mirror" | "custom" | "unknown" | string | null;
   authMode?: string | null;
   build?: string | null;
+  deployment?: DeploymentMetadata | null;
   migration?: string | null;
   storage?: {
     database?: "d1" | "sqlite" | string | null;
@@ -385,6 +389,30 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
     return response.json() as Promise<T>;
   };
 
+  const requestPluginPublic = async (input: PluginPublicFetchRequest, signal?: AbortSignal): Promise<PluginPublicFetchResponse> => {
+    const { context, response } = await send("/api/v1/plugins/network/fetch", {
+      method: "POST",
+      body: JSON.stringify(input),
+      signal,
+    });
+    const upstreamStatus = response.headers.get("x-edgeever-upstream-status");
+    if (!response.ok || !upstreamStatus) await throwRequestError(context, response, "Public network request failed");
+    const status = Number(upstreamStatus);
+    if (!Number.isInteger(status) || status < 100 || status > 599) throw new Error("Invalid public network response status");
+    const headers: Record<string, string> = {};
+    for (const [key, value] of response.headers) {
+      const prefix = "x-edgeever-upstream-header-";
+      if (key.startsWith(prefix)) headers[key.slice(prefix.length)] = value;
+    }
+    return {
+      url: input.url,
+      status,
+      statusText: decodeURIComponent(response.headers.get("x-edgeever-upstream-status-text") ?? ""),
+      headers,
+      body: await response.arrayBuffer(),
+    };
+  };
+
   const requestResourceResponse = async (path: string, init?: RequestInit) => {
     const isAbsolute = isAbsoluteHttpUrl(path);
     const { context, response } = await send(path, init, {
@@ -563,7 +591,7 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
 
   return {
     getInstanceHealth: () => request<InstanceHealth>("/api/health"),
-    ...createPluginCapabilities(request),
+    ...createPluginCapabilities(request, requestPluginPublic),
 
     getInstanceRelease: () => request<InstanceRelease>("/api/release"),
 

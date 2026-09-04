@@ -10,6 +10,8 @@ export type Bindings = {
   EDGE_EVER_AUTH_USERNAME?: string;
   EDGE_EVER_RUNTIME?: string;
   EDGE_EVER_CONTAINER_IMAGE?: string;
+  EDGE_EVER_DEPLOYMENT_TRIGGER?: string;
+  EDGE_EVER_DEPLOYMENT_METHOD?: string;
   EDGE_EVER_AUTH_PASSWORD?: string;
   EDGE_EVER_AUTH_PASSWORD_HASH?: string;
   EDGE_EVER_SESSION_TTL_DAYS?: string;
@@ -19,6 +21,7 @@ export type Bindings = {
   EDGE_EVER_AUTH_LOGIN_IP_MAX_ATTEMPTS?: string;
   EDGE_EVER_AUTH_LOGIN_IP_COOLDOWN_SECONDS?: string;
   EDGE_EVER_R2_BUCKET_NAME?: string;
+  /** Legacy decryption fallback; new credentials use auth-derived keys. */
   EDGE_EVER_STORAGE_ENCRYPTION_KEY?: string;
   EDGE_EVER_CREDENTIALS_ENCRYPTION_KEY?: string;
   EDGE_EVER_DEMO_MODE?: string;
